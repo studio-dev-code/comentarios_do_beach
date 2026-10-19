@@ -28,3 +28,6 @@ Use hospedagem Python com volume persistente para `data/`, HTTPS e variável POR
 
 ## Notas por categoria
 A experiência geral é obrigatória. Qualidade/sabor, atendimento, espera e limpeza/conforto são opcionais (1 a 5); espera aceita Não se aplica. O painel mostra notas individuais e médias de todos os registros, independentemente da publicação, excluindo campos vazios e não aplicáveis. O mural público mantém somente a nota geral e o comentário autorizado. Avaliações antigas não recebem notas presumidas. O CSV inclui todas as categorias.
+
+## Preenchimento guiado
+Formulário em três etapas: experiência e refeição; detalhes opcionais; comentário, nome e autorização. Os botões permitem voltar sem perder respostas. As notas detalhadas usam opções de toque de 1 a 5, com alternativas Não avaliar e Não se aplica para espera. Há progresso, resumo antes do envio e contador de caracteres. Nenhuma avaliação é enviada antes da etapa final.
