@@ -25,3 +25,6 @@ Use hospedagem Python com volume persistente para `data/`, HTTPS e variável POR
 - O hóspede acompanha avaliações enviadas neste navegador usando um comprovante privado salvo localmente. Limpar os dados do navegador remove esse acompanhamento; o registro do hotel permanece. Não há prazo automático de aprovação.
 - Sessão administrativa de 8 horas, encerrada ao reiniciar o servidor. Cinco tentativas de login por IP a cada cinco minutos.
 - Teste: `python3 test_moderation.py` usa banco temporário e não altera as avaliações reais.
+
+## Notas por categoria
+A experiência geral é obrigatória. Qualidade/sabor, atendimento, espera e limpeza/conforto são opcionais (1 a 5); espera aceita Não se aplica. O painel mostra notas individuais e médias de todos os registros, independentemente da publicação, excluindo campos vazios e não aplicáveis. O mural público mantém somente a nota geral e o comentário autorizado. Avaliações antigas não recebem notas presumidas. O CSV inclui todas as categorias.
