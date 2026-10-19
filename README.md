@@ -36,3 +36,6 @@ O formulário recebe novas avaliações somente de almoço e jantar. Registros a
 
 ## Almoço e jantar no mesmo envio
 O hóspede escolhe Almoço, Jantar ou Os dois. A nota geral e os detalhes/comentários são independentes por refeição; nome e autorização são preenchidos uma vez. Ao avaliar os dois, há uma etapa de detalhes para cada refeição e um único botão final de envio. O servidor valida todo o conjunto antes de gravar as refeições na mesma transação, vinculadas por submission_id. O mural e a moderação continuam mostrando cada refeição separadamente.
+
+## Área da equipe
+Painel com resumo dos 200 registros mais recentes, médias gerais, abas por situação, busca por nome/comentário e filtro por refeição. As notas por categoria ficam recolhidas em cada avaliação. Opiniões privadas não apresentam ações de publicação. O login e as permissões continuam obrigatórios.
