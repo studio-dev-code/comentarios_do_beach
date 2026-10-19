@@ -52,6 +52,24 @@ class ModerationTest(unittest.TestCase):
                 self.assertEqual(stats['food_rating']['count'],1)
                 self.assertEqual(stats['rating'],{'average':3.0,'count':2})
                 self.assertEqual(call(guest,'/api/reviews'),[])
+                two=call(guest,'/api/reviews',dict(name='Ana Silva',publication_consent=True,reviews=[dict(meal='Almoço',rating=5,food_rating=4,comment='Almoço ótimo'),dict(meal='Jantar',rating=2,service_rating=3,comment='Jantar demorado')]))
+                self.assertEqual(len(two['receipts']),2)
+                lunch=call(guest,'/api/reviews/own',dict(receipt=two['receipts'][0]['receipt']))[0]
+                dinner=call(guest,'/api/reviews/own',dict(receipt=two['receipts'][1]['receipt']))[0]
+                self.assertEqual((lunch['meal'],lunch['rating'],dinner['meal'],dinner['rating']),('Almoço',5,'Jantar',2))
+                self.assertEqual(lunch['status'],'pending');self.assertEqual(dinner['status'],'pending')
+                details=call(admin,'/api/admin/reviews')
+                pair=[r for r in details if r['submission_id']==two['submission_id']]
+                self.assertEqual(len(pair),2)
+                self.assertEqual(call(guest,'/api/reviews'),[])
+                before=len(details)
+                for invalid in ([dict(meal='Almoço',rating=5),dict(meal='Jantar',rating=7)],[dict(meal='Almoço',rating=5),dict(meal='Almoço',rating=4)]):
+                    with self.assertRaises(urllib.error.HTTPError) as error: call(guest,'/api/reviews',dict(reviews=invalid))
+                    self.assertEqual(error.exception.code,400);error.exception.close()
+                    self.assertEqual(len(call(admin,'/api/admin/reviews')),before)
+                one=call(guest,'/api/reviews',dict(reviews=[dict(meal='Jantar',rating=4)],publication_consent=False))
+                self.assertEqual(len(one['receipts']),1)
+                self.assertEqual(call(guest,'/api/reviews/own',dict(receipt=one['receipts'][0]['receipt']))[0]['status'],'private')
                 call(admin,'/api/admin/logout',{})
                 self.assertFalse(call(admin,'/api/admin/session')['authenticated'])
             finally:

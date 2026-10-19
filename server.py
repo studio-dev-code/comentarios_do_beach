@@ -1,4 +1,4 @@
-import json, os, sqlite3, secrets, hashlib, hmac, time, threading
+import json, os, sqlite3, secrets, hashlib, hmac, time, threading, datetime
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from http.cookies import SimpleCookie
@@ -8,7 +8,7 @@ DB.parent.mkdir(exist_ok=True)
 with sqlite3.connect(DB) as db:
     db.execute('CREATE TABLE IF NOT EXISTS reviews (id INTEGER PRIMARY KEY, created_at TEXT DEFAULT CURRENT_TIMESTAMP, rating INTEGER NOT NULL, meal TEXT NOT NULL, name TEXT NOT NULL, comment TEXT NOT NULL)')
     cols={r[1] for r in db.execute('PRAGMA table_info(reviews)')}
-    for col,definition in [('status',"TEXT NOT NULL DEFAULT 'pending'"),('receipt','TEXT'),('publication_consent','INTEGER NOT NULL DEFAULT 0'),('consent_at','TEXT'),('consent_version','TEXT'),('food_rating','INTEGER'),('service_rating','INTEGER'),('wait_rating','INTEGER'),('ambience_rating','INTEGER'),('wait_not_applicable','INTEGER NOT NULL DEFAULT 0')]:
+    for col,definition in [('status',"TEXT NOT NULL DEFAULT 'pending'"),('receipt','TEXT'),('publication_consent','INTEGER NOT NULL DEFAULT 0'),('consent_at','TEXT'),('consent_version','TEXT'),('food_rating','INTEGER'),('service_rating','INTEGER'),('wait_rating','INTEGER'),('ambience_rating','INTEGER'),('wait_not_applicable','INTEGER NOT NULL DEFAULT 0'),('submission_id','TEXT')]:
         if col not in cols: db.execute('ALTER TABLE reviews ADD COLUMN '+col+' '+definition)
     db.execute("UPDATE reviews SET status='private' WHERE publication_consent=0")
     db.execute('CREATE UNIQUE INDEX IF NOT EXISTS receipt_idx ON reviews(receipt)')
@@ -39,7 +39,7 @@ class Handler(BaseHTTPRequestHandler):
         with sqlite3.connect(DB) as db:
             db.row_factory=sqlite3.Row
             fields='id,created_at,rating,meal,name,comment,status,publication_consent,consent_at,consent_version'
-            if detailed: fields+=',food_rating,service_rating,wait_rating,ambience_rating,wait_not_applicable'
+            if detailed: fields+=',food_rating,service_rating,wait_rating,ambience_rating,wait_not_applicable,submission_id'
             return [dict(r) for r in db.execute('SELECT '+fields+' FROM reviews WHERE '+where+' ORDER BY id DESC LIMIT 200',args)]
     def do_GET(self):
         path=self.path.split('?')[0]
@@ -63,24 +63,42 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if self.headers.get('X-Requested-With')!='BeachHills': return self.respond(403,{})
             length=int(self.headers.get('Content-Length','0'))
-            if not 0<length<=12000: return self.respond(413,{})
+            if not 0<length<=24000: return self.respond(413,{})
             data=json.loads(self.rfile.read(length))
             if not isinstance(data,dict): return self.respond(400,{})
             if self.path=='/api/reviews':
-                rating,meal=data.get('rating'),data.get('meal')
-                name,comment=data.get('name',''),data.get('comment','')
-                if type(rating) is not int or rating not in range(1,6) or meal not in ('Almoço','Jantar') or not isinstance(name,str) or not isinstance(comment,str) or len(name)>80 or len(comment)>1500: return self.respond(400,{'error':'Confira os campos.'})
-                categories=[data.get(k) for k in ('food_rating','service_rating','wait_rating','ambience_rating')]
-                if any(v is not None and (type(v) is not int or v not in range(1,6)) for v in categories): return self.respond(400,{'error':'As notas devem estar entre 1 e 5.'})
-                wait_na=data.get('wait_not_applicable',False)
-                if type(wait_na) is not bool or (wait_na and categories[2] is not None): return self.respond(400,{'error':'Confira a avaliação do tempo de espera.'})
-                consent=data.get('publication_consent',False)
-                if type(consent) is not bool: return self.respond(400,{})
-                token=secrets.token_urlsafe(32)
+                batch='reviews' in data
+                incoming=data.get('reviews') if batch else [data]
+                if not isinstance(incoming,list) or not 1<=len(incoming)<=2: return self.respond(400,{'error':'Escolha almoço, jantar ou os dois.'})
+                submission_id=secrets.token_urlsafe(16)
+                prepared=[]
+                seen=set()
+                for item in incoming:
+                    if not isinstance(item,dict): return self.respond(400,{})
+                    rating,meal=item.get('rating'),item.get('meal')
+                    name=data.get('name','') if batch else item.get('name','')
+                    comment=item.get('comment','')
+                    if type(rating) is not int or rating not in range(1,6) or meal not in ('Almoço','Jantar') or meal in seen or not isinstance(name,str) or not isinstance(comment,str) or len(name)>80 or len(comment)>1500: return self.respond(400,{'error':'Confira a nota geral e os campos de cada refeição.'})
+                    seen.add(meal)
+                    categories=[item.get(k) for k in ('food_rating','service_rating','wait_rating','ambience_rating')]
+                    if any(v is not None and (type(v) is not int or v not in range(1,6)) for v in categories): return self.respond(400,{'error':'As notas devem estar entre 1 e 5.'})
+                    wait_na=item.get('wait_not_applicable',False)
+                    if type(wait_na) is not bool or (wait_na and categories[2] is not None): return self.respond(400,{'error':'Confira a avaliação do tempo de espera.'})
+                    consent=data.get('publication_consent',False) if batch else item.get('publication_consent',False)
+                    if type(consent) is not bool: return self.respond(400,{})
+                    token=secrets.token_urlsafe(32)
+                    now=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+                    values=(rating,meal,name.strip().split(' ')[0],comment.strip(),hashlib.sha256(token.encode()).hexdigest(),int(consent),now if consent else None,('publication-v2' if batch else 'publication-v1') if consent else None,'pending' if consent else 'private',*categories,int(wait_na),submission_id)
+                    prepared.append((values,token,meal))
+                receipts=[]
                 with sqlite3.connect(DB) as db:
-                    cursor=db.execute('INSERT INTO reviews (rating,meal,name,comment,receipt,publication_consent,consent_at,consent_version,status,food_rating,service_rating,wait_rating,ambience_rating,wait_not_applicable) VALUES (?,?,?,?,?,?,CASE WHEN ?=1 THEN CURRENT_TIMESTAMP ELSE NULL END,?,?,?,?,?,?,?)',(rating,meal,name.strip().split(' ')[0],comment.strip(),hashlib.sha256(token.encode()).hexdigest(),int(consent),int(consent),'publication-v1' if consent else None,'pending' if consent else 'private',*categories,int(wait_na)))
-                    review_id=cursor.lastrowid
-                return self.respond(201,{'ok':True,'id':review_id,'receipt':token})
+                    for values,token,meal in prepared:
+                        columns='rating,meal,name,comment,receipt,publication_consent,consent_at,consent_version,status,food_rating,service_rating,wait_rating,ambience_rating,wait_not_applicable,submission_id'
+                        cursor=db.execute('INSERT INTO reviews ('+columns+') VALUES ('+','.join('?' for _ in values)+')',values)
+                        receipts.append({'id':cursor.lastrowid,'receipt':token,'meal':meal})
+                result={'ok':True,'receipts':receipts,'submission_id':submission_id}
+                if not batch: result.update(receipts[0])
+                return self.respond(201,result)
             if self.path=='/api/reviews/own':
                 token=data.get('receipt','')
                 if not isinstance(token,str) or len(token)>100: return self.respond(400,{})

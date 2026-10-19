@@ -33,3 +33,6 @@ A experiência geral é obrigatória. Qualidade/sabor, atendimento, espera e lim
 Formulário em três etapas: experiência e refeição; detalhes opcionais; comentário, nome e autorização. Os botões permitem voltar sem perder respostas. As notas detalhadas usam opções de toque de 1 a 5, com alternativas Não avaliar e Não se aplica para espera. Há progresso, resumo antes do envio e contador de caracteres. Nenhuma avaliação é enviada antes da etapa final.
 
 O formulário recebe novas avaliações somente de almoço e jantar. Registros anteriores permanecem preservados.
+
+## Almoço e jantar no mesmo envio
+O hóspede escolhe Almoço, Jantar ou Os dois. A nota geral e os detalhes/comentários são independentes por refeição; nome e autorização são preenchidos uma vez. Ao avaliar os dois, há uma etapa de detalhes para cada refeição e um único botão final de envio. O servidor valida todo o conjunto antes de gravar as refeições na mesma transação, vinculadas por submission_id. O mural e a moderação continuam mostrando cada refeição separadamente.
