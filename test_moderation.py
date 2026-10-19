@@ -1,0 +1,45 @@
+import json, sqlite3, tempfile, threading, unittest, urllib.request, urllib.error, http.cookiejar, secrets
+from pathlib import Path
+from http.cookiejar import CookieJar
+import server
+class ModerationTest(unittest.TestCase):
+    def test_flow(self):
+        old_root,old_db=server.ROOT,server.DB
+        with tempfile.TemporaryDirectory() as folder:
+            server.ROOT=Path(folder); (server.ROOT/'data').mkdir()
+            server.DB=server.ROOT/'data'/'reviews.sqlite3'
+            with sqlite3.connect(old_db) as source, sqlite3.connect(server.DB) as target: source.backup(target)
+            with sqlite3.connect(server.DB) as db: db.execute('DELETE FROM reviews')
+            salt=secrets.token_hex(16)
+            (server.ROOT/'data'/'admin.json').write_text(json.dumps(dict(username='test-admin',salt=salt,hash=server.password_hash('test-only-password',salt))))
+            http=server.ThreadingHTTPServer(('127.0.0.1',0),server.Handler)
+            threading.Thread(target=http.serve_forever,daemon=True).start()
+            base='http://127.0.0.1:'+str(http.server_port)
+            guest=urllib.request.build_opener(); admin=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(CookieJar()))
+            def call(client,path,data=None):
+                req=urllib.request.Request(base+path,data=None if data is None else json.dumps(data).encode(),headers={'X-Requested-With':'BeachHills','Content-Type':'application/json'})
+                with client.open(req) as response: return json.load(response)
+            try:
+                receipt=call(guest,'/api/reviews',dict(rating=1,meal='Jantar',name='Maria Silva',comment='<script>alert(1)</script>',publication_consent=True))
+                self.assertEqual(call(guest,'/api/reviews'),[])
+                own=call(guest,'/api/reviews/own',{'receipt':receipt['receipt']})
+                self.assertEqual(own[0]['status'],'pending');self.assertEqual(own[0]['name'],'Maria')
+                self.assertEqual(call(guest,'/api/reviews/own',{'receipt':'wrong'}),[])
+                with self.assertRaises(urllib.error.HTTPError) as error: call(guest,'/api/admin/moderate',dict(id=receipt['id'],status='approved'))
+                self.assertEqual(error.exception.code,401);error.exception.close()
+                call(admin,'/api/admin/login',dict(username='test-admin',password='test-only-password'))
+                call(admin,'/api/admin/moderate',dict(id=receipt['id'],status='approved'))
+                self.assertEqual(call(guest,'/api/reviews')[0]['rating'],1)
+                self.assertNotIn('receipt',call(guest,'/api/reviews')[0])
+                call(admin,'/api/admin/moderate',dict(id=receipt['id'],status='rejected'))
+                self.assertEqual(call(guest,'/api/reviews'),[])
+                private=call(guest,'/api/reviews',dict(rating=5,meal='Almoço',comment='Privada'))
+                self.assertEqual(call(guest,'/api/reviews/own',{'receipt':private['receipt']})[0]['status'],'private')
+                with self.assertRaises(urllib.error.HTTPError) as error: call(admin,'/api/admin/moderate',dict(id=private['id'],status='approved'))
+                self.assertEqual(error.exception.code,409);error.exception.close()
+                self.assertEqual(call(guest,'/api/reviews'),[])
+                call(admin,'/api/admin/logout',{})
+                self.assertFalse(call(admin,'/api/admin/session')['authenticated'])
+            finally:
+                http.shutdown();http.server_close();server.ROOT,server.DB=old_root,old_db
+if __name__=='__main__': unittest.main()
