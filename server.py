@@ -17,6 +17,26 @@ ATTEMPTS={}
 LOCK=threading.Lock()
 def password_hash(password,salt):
     return hashlib.scrypt(password.encode(),salt=bytes.fromhex(salt),n=16384,r=8,p=1).hex()
+def load_users():
+    path=ROOT/'data'/'users.json'
+    if path.exists(): return json.loads(path.read_text())
+    legacy=ROOT/'data'/'admin.json'
+    if legacy.exists():
+        account=json.loads(legacy.read_text())
+        return {account['username'].casefold():{'display_name':account['username'],'salt':account['salt'],'hash':account['hash']}}
+    return {}
+def save_users(users):
+    path=ROOT/'data'/'users.json'
+    temporary=path.with_name('.users-'+secrets.token_hex(8)+'.tmp')
+    fd=os.open(temporary,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+    try:
+        with os.fdopen(fd,'w') as file:
+            json.dump(users,file)
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(temporary,path)
+    finally:
+        if temporary.exists(): temporary.unlink()
 class Handler(BaseHTTPRequestHandler):
     def respond(self,code,data,mime='application/json; charset=utf-8',cookie=None):
         body=data if isinstance(data,bytes) else json.dumps(data,ensure_ascii=False).encode()
@@ -25,16 +45,18 @@ class Handler(BaseHTTPRequestHandler):
         if cookie: self.send_header('Set-Cookie',cookie)
         self.end_headers()
         self.wfile.write(body)
-    def admin(self):
+    def session_info(self):
         try:
             cookies=SimpleCookie(self.headers.get('Cookie',''))
             token=cookies['beach_session'].value
             with LOCK:
                 now=time.time()
                 for key in list(SESSIONS):
-                    if SESSIONS[key]<now: del SESSIONS[key]
-                return token in SESSIONS
-        except (KeyError,ValueError): return False
+                    if SESSIONS[key]['expires']<now: del SESSIONS[key]
+                return SESSIONS.get(token)
+        except (KeyError,ValueError): return None
+    def admin(self):
+        return self.session_info() is not None
     def rows(self,where,args=(),detailed=False):
         with sqlite3.connect(DB) as db:
             db.row_factory=sqlite3.Row
@@ -46,7 +68,9 @@ class Handler(BaseHTTPRequestHandler):
         pages={'/':'index.html','/index.html':'index.html','/avaliacoes':'reviews.html','/admin':'admin.html'}
         if path in pages: return self.respond(200,(ROOT/pages[path]).read_bytes(),'text/html; charset=utf-8')
         if path=='/api/reviews': return self.respond(200,self.rows("status='approved' AND publication_consent=1"))
-        if path=='/api/admin/session': return self.respond(200,{'authenticated':self.admin(),'configured':(ROOT/'data'/'admin.json').exists()})
+        if path=='/api/admin/session':
+            session=self.session_info()
+            return self.respond(200,{'authenticated':session is not None,'configured':bool(load_users()),'username':session['display_name'] if session else None})
         if path=='/api/admin/stats':
             if not self.admin(): return self.respond(401,{'error':'Entre no painel.'})
             with sqlite3.connect(DB) as db:
@@ -109,21 +133,48 @@ class Handler(BaseHTTPRequestHandler):
                     recent=[t for t in ATTEMPTS.get(ip,[]) if t>time.time()-300]
                     if len(recent)>=5: return self.respond(429,{'error':'Muitas tentativas. Aguarde 5 minutos.'})
                     ATTEMPTS[ip]=recent+[time.time()]
-                config=ROOT/'data'/'admin.json'
-                if not config.exists(): return self.respond(503,{'error':'Administrador ainda não configurado. Execute python3 setup_admin.py no terminal.'})
-                auth=json.loads(config.read_text())
+                users=load_users()
+                if not users: return self.respond(503,{'error':'Usuários ainda não configurados. Execute python3 setup_users.py no terminal.'})
                 username,password=data.get('username',''),data.get('password','')
-                if not isinstance(password,str) or len(password)>256: return self.respond(400,{})
-                valid=hmac.compare_digest(password_hash(password,auth['salt']),auth['hash'])
-                if not valid or username!=auth['username']: return self.respond(401,{'error':'Usuário ou senha incorretos.'})
+                if not isinstance(username,str) or not isinstance(password,str) or len(username)>80 or len(password)>256: return self.respond(400,{})
+                username=username.strip().casefold()
+                auth=users.get(username)
+                salt=auth['salt'] if auth else '00'*16
+                computed=password_hash(password,salt)
+                valid=auth is not None and hmac.compare_digest(computed,auth['hash'])
+                if not valid: return self.respond(401,{'error':'Usuário ou senha incorretos.'})
                 token=secrets.token_urlsafe(32)
                 with LOCK:
-                    SESSIONS[token]=time.time()+8*3600
+                    SESSIONS[token]={'expires':time.time()+8*3600,'username':username,'display_name':auth.get('display_name',username)}
                     ATTEMPTS.pop(ip,None)
                 secure='; Secure' if self.headers.get('X-Forwarded-Proto')=='https' else ''
                 return self.respond(200,{'ok':True},cookie='beach_session='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800'+secure)
             if self.path.startswith('/api/admin/'):
                 if not self.admin(): return self.respond(401,{'error':'Entre no painel.'})
+                if self.path=='/api/admin/password':
+                    session=self.session_info()
+                    if not session: return self.respond(401,{'error':'Entre novamente no painel.'})
+                    current,new,confirmation=data.get('current_password'),data.get('new_password'),data.get('confirmation')
+                    if not all(isinstance(v,str) for v in (current,new,confirmation)) or len(current)>256 or not 8<=len(new)<=256 or new!=confirmation:
+                        return self.respond(400,{'error':'A nova senha deve ter de 8 a 256 caracteres e a confirmação deve ser igual.'})
+                    if current==new: return self.respond(400,{'error':'Escolha uma senha diferente da atual.'})
+                    username=session['username']
+                    attempt_key='password:'+username
+                    with LOCK:
+                        recent=[t for t in ATTEMPTS.get(attempt_key,[]) if t>time.time()-300]
+                        if len(recent)>=5: return self.respond(429,{'error':'Muitas tentativas. Aguarde 5 minutos.'})
+                        ATTEMPTS[attempt_key]=recent+[time.time()]
+                        users=load_users()
+                        account=users.get(username)
+                        if not account or not hmac.compare_digest(password_hash(current,account['salt']),account['hash']):
+                            return self.respond(403,{'error':'Senha atual incorreta.'})
+                        salt=secrets.token_hex(16)
+                        users[username]={**account,'salt':salt,'hash':password_hash(new,salt)}
+                        save_users(users)
+                        ATTEMPTS.pop(attempt_key,None)
+                        for key in list(SESSIONS):
+                            if SESSIONS[key]['username']==username: del SESSIONS[key]
+                    return self.respond(200,{'ok':True},cookie='beach_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0')
                 if self.path=='/api/admin/logout':
                     cookies=SimpleCookie(self.headers.get('Cookie',''))
                     with LOCK: SESSIONS.pop(cookies['beach_session'].value,None)

@@ -1,6 +1,7 @@
 import getpass, json, secrets, os
 from server import ROOT,password_hash
 p=ROOT/'data'/'admin.json'
+if (ROOT/'data'/'users.json').exists(): raise SystemExit('Use o painel para alterar sua senha; Hotel e Devy já estão configurados.')
 if p.exists(): raise SystemExit('Administrador já configurado. Nenhuma alteração realizada.')
 username=input('Usuário do administrador: ').strip()
 password=getpass.getpass('Senha (mínimo 12 caracteres): ')

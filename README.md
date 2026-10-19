@@ -20,10 +20,10 @@ Use hospedagem Python com volume persistente para `data/`, HTTPS e variável POR
 ## Mural e moderação
 - `/avaliacoes`: mural público, com até 200 avaliações aprovadas mais recentes.
 - `/admin`: painel protegido; aprovar, não publicar ou voltar para análise.
-- Crie o administrador com `python3 setup_admin.py` no terminal. Defina usuário e senha (mínimo 12 caracteres); a senha não aparece ao digitar e somente seu hash é armazenado. Não envie a senha pelo chat.
+- Crie Hotel e Devy com `python3 setup_users.py` no terminal. Defina a senha inicial no próprio terminal; a senha não aparece ao digitar e somente seu hash é armazenado. Não envie a senha pelo chat.
 - A autorização de publicação é opcional e desmarcada. Sem ela, a avaliação é privada e o servidor bloqueia sua publicação. A autorização, data UTC e versão do texto ficam registradas. Avaliações anteriores à autorização permanecem privadas.
 - O hóspede acompanha avaliações enviadas neste navegador usando um comprovante privado salvo localmente. Limpar os dados do navegador remove esse acompanhamento; o registro do hotel permanece. Não há prazo automático de aprovação.
-- Sessão administrativa de 8 horas, encerrada ao reiniciar o servidor. Cinco tentativas de login por IP a cada cinco minutos.
+- Sessão administrativa de 8 horas, encerrada ao reiniciar o servidor ou trocar a senha da respectiva conta. Cinco tentativas de login por IP a cada cinco minutos.
 - Teste: `python3 test_moderation.py` usa banco temporário e não altera as avaliações reais.
 
 ## Notas por categoria
@@ -39,3 +39,10 @@ O hóspede escolhe Almoço, Jantar ou Os dois. A nota geral e os detalhes/coment
 
 ## Área da equipe
 Painel com resumo dos 200 registros mais recentes, médias gerais, abas por situação, busca por nome/comentário e filtro por refeição. As notas por categoria ficam recolhidas em cada avaliação. Opiniões privadas não apresentam ações de publicação. O login e as permissões continuam obrigatórios.
+
+## Usuários e troca de senha
+- Hotel: equipe do hotel. Devy: desenvolvimento do site. Ambos têm acesso total. O login aceita maiúsculas e minúsculas.
+- Execute `python3 setup_users.py` para criar apenas as contas ausentes, preservando contas existentes. Informe a senha inicial solicitada pelo responsável. Senhas e usuários ficam em data/users.json, fora do Git, com hashes scrypt e arquivo restrito.
+- No painel, Alterar senha pede a senha atual, a nova e sua confirmação. A nova senha deve ter no mínimo 8 caracteres. A troca encerra todas as sessões daquela conta, sem afetar o outro usuário.
+- Contas anteriores em data/admin.json continuam compatíveis e são preservadas ao cadastrar os novos acessos.
+- Testes isolados: `python3 -m unittest test_moderation test_users`.
