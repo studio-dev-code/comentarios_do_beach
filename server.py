@@ -69,7 +69,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.path=='/api/reviews':
                 rating,meal=data.get('rating'),data.get('meal')
                 name,comment=data.get('name',''),data.get('comment','')
-                if type(rating) is not int or rating not in range(1,6) or meal not in ('Café da manhã','Almoço','Jantar') or not isinstance(name,str) or not isinstance(comment,str) or len(name)>80 or len(comment)>1500: return self.respond(400,{'error':'Confira os campos.'})
+                if type(rating) is not int or rating not in range(1,6) or meal not in ('Almoço','Jantar') or not isinstance(name,str) or not isinstance(comment,str) or len(name)>80 or len(comment)>1500: return self.respond(400,{'error':'Confira os campos.'})
                 categories=[data.get(k) for k in ('food_rating','service_rating','wait_rating','ambience_rating')]
                 if any(v is not None and (type(v) is not int or v not in range(1,6)) for v in categories): return self.respond(400,{'error':'As notas devem estar entre 1 e 5.'})
                 wait_na=data.get('wait_not_applicable',False)

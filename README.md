@@ -31,3 +31,5 @@ A experiência geral é obrigatória. Qualidade/sabor, atendimento, espera e lim
 
 ## Preenchimento guiado
 Formulário em três etapas: experiência e refeição; detalhes opcionais; comentário, nome e autorização. Os botões permitem voltar sem perder respostas. As notas detalhadas usam opções de toque de 1 a 5, com alternativas Não avaliar e Não se aplica para espera. Há progresso, resumo antes do envio e contador de caracteres. Nenhuma avaliação é enviada antes da etapa final.
+
+O formulário recebe novas avaliações somente de almoço e jantar. Registros anteriores permanecem preservados.
