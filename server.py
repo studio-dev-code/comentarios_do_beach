@@ -70,6 +70,7 @@ class Handler(BaseHTTPRequestHandler):
         selected_hotel=parse_qs(parsed.query).get('hotel',['all'])[0]
         pages={'/':'index.html','/index.html':'index.html','/avaliacoes':'reviews.html','/admin':'admin.html','/beach-hills':'index.html','/hotel-fenix':'index.html','/avaliacoes/beach-hills':'reviews.html','/avaliacoes/hotel-fenix':'reviews.html'}
         if path in pages: return self.respond(200,(ROOT/pages[path]).read_bytes(),'text/html; charset=utf-8')
+        if path=='/assets/qrcode.js': return self.respond(200,(ROOT/'assets'/'qrcode.js').read_bytes(),'text/javascript; charset=utf-8')
         if path=='/api/reviews':
             hotel=selected_hotel if selected_hotel in ('beach_hills','hotel_fenix') else 'beach_hills'
             return self.respond(200,self.rows("status='approved' AND publication_consent=1 AND hotel=?",(hotel,)))

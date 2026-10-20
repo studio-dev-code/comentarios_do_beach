@@ -50,3 +50,11 @@ As contas Hotel e Devy ainda NÃO foram ativadas. A confirmação foi feita sem 
 - Exportação CSV inclui Hotel. Contas existentes e senhas preservadas.
 - Testes de integração e sintaxe JavaScript aprovados. Prévia externa bloqueada pelo navegador (ERR_BLOCKED_BY_CLIENT), conferência visual pendente.
 - Servidor iniciado na porta 8000. Hospedagem definitiva e QR Codes impressos devem usar endereço público permanente; este Codespaces precisa estar ativo e a prévia segue com o acesso anterior.
+
+## Links e QR Codes no ADM — 20/10/2026
+- Seção Links e QR Codes dos hotéis no início do painel autenticado, com cartão Beach Hills e cartão Hotel Fênix.
+- Link calculado pelo endereço atual do sistema e rota específica do hotel; botões Copiar link, Abrir avaliação, Baixar QR PNG e Baixar QR SVG.
+- QR gerado localmente pela biblioteca qrcode-generator 1.4.4, incluída em assets/qrcode.js com a licença original preservada. Nenhum serviço externo recebe o link.
+- PNG de alta resolução com módulos inteiros e margem branca de quatro módulos; SVG vetorial disponível para impressão.
+- Aviso no ADM quando o endereço for prévia do Codespaces. Ao hospedar em endereço permanente, links e QR Codes passam a usar esse domínio automaticamente.
+- Sintaxe, geração distinta dos dois QR Codes, margem e endpoint da biblioteca verificados; testes de integração existentes aprovados. Servidor reiniciado na porta 8000.
