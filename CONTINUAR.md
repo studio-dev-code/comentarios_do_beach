@@ -40,3 +40,13 @@ As contas Hotel e Devy ainda NÃO foram ativadas. A confirmação foi feita sem 
 - Testes test_moderation e test_users aprovados, incluindo avaliação privada no painel. Teste isolado com 205 registros e sintaxe JavaScript aprovados.
 - Contas ainda ausentes: responsável precisa executar setup_users.py e digitar a senha. Não afirmar que ativação terminou.
 - Hospedagem permanente e backup externo continuam pendentes; Codespaces precisa permanecer ligado.
+
+## Dois hotéis — 20/10/2026
+- Implementados /beach-hills e /hotel-fenix. Cada formulário identifica automaticamente o hotel ao enviar almoço, jantar ou ambos.
+- Murais /avaliacoes/beach-hills e /avaliacoes/hotel-fenix isolados por hotel; avaliações próprias também filtradas. / e /avaliacoes mantêm compatibilidade com Beach Hills.
+- Dois registros reais existentes preservados, migrados para beach_hills; backup antes da alteração em data/backups.
+- Painel /admin unificado com filtro Os dois hotéis / Beach Hills / Hotel Fênix; identificação nos registros, contagens e médias por hotel.
+- Identidades inspiradas nos sites oficiais, fotos oficiais de referência, botão visível para o site do hotel no cabeçalho e na apresentação. Layout responsivo para celular.
+- Exportação CSV inclui Hotel. Contas existentes e senhas preservadas.
+- Testes de integração e sintaxe JavaScript aprovados. Prévia externa bloqueada pelo navegador (ERR_BLOCKED_BY_CLIENT), conferência visual pendente.
+- Servidor iniciado na porta 8000. Hospedagem definitiva e QR Codes impressos devem usar endereço público permanente; este Codespaces precisa estar ativo e a prévia segue com o acesso anterior.

@@ -2,13 +2,14 @@ import json, os, sqlite3, secrets, hashlib, hmac, time, threading, datetime
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from http.cookies import SimpleCookie
+from urllib.parse import urlparse, parse_qs
 ROOT=Path(__file__).resolve().parent
 DB=ROOT/'data'/'reviews.sqlite3'
 DB.parent.mkdir(exist_ok=True)
 with sqlite3.connect(DB) as db:
     db.execute('CREATE TABLE IF NOT EXISTS reviews (id INTEGER PRIMARY KEY, created_at TEXT DEFAULT CURRENT_TIMESTAMP, rating INTEGER NOT NULL, meal TEXT NOT NULL, name TEXT NOT NULL, comment TEXT NOT NULL)')
     cols={r[1] for r in db.execute('PRAGMA table_info(reviews)')}
-    for col,definition in [('status',"TEXT NOT NULL DEFAULT 'pending'"),('receipt','TEXT'),('publication_consent','INTEGER NOT NULL DEFAULT 0'),('consent_at','TEXT'),('consent_version','TEXT'),('food_rating','INTEGER'),('service_rating','INTEGER'),('wait_rating','INTEGER'),('ambience_rating','INTEGER'),('wait_not_applicable','INTEGER NOT NULL DEFAULT 0'),('submission_id','TEXT')]:
+    for col,definition in [('status',"TEXT NOT NULL DEFAULT 'pending'"),('receipt','TEXT'),('publication_consent','INTEGER NOT NULL DEFAULT 0'),('consent_at','TEXT'),('consent_version','TEXT'),('food_rating','INTEGER'),('service_rating','INTEGER'),('wait_rating','INTEGER'),('ambience_rating','INTEGER'),('wait_not_applicable','INTEGER NOT NULL DEFAULT 0'),('submission_id','TEXT'),('hotel',"TEXT NOT NULL DEFAULT 'beach_hills'")]:
         if col not in cols: db.execute('ALTER TABLE reviews ADD COLUMN '+col+' '+definition)
     db.execute("UPDATE reviews SET status='private' WHERE publication_consent=0")
     db.execute('CREATE UNIQUE INDEX IF NOT EXISTS receipt_idx ON reviews(receipt)')
@@ -60,14 +61,18 @@ class Handler(BaseHTTPRequestHandler):
     def rows(self,where,args=(),detailed=False):
         with sqlite3.connect(DB) as db:
             db.row_factory=sqlite3.Row
-            fields='id,created_at,rating,meal,name,comment,status,publication_consent,consent_at,consent_version'
+            fields='id,created_at,rating,meal,name,comment,status,publication_consent,consent_at,consent_version,hotel'
             if detailed: fields+=',food_rating,service_rating,wait_rating,ambience_rating,wait_not_applicable,submission_id'
             return [dict(r) for r in db.execute('SELECT '+fields+' FROM reviews WHERE '+where+' ORDER BY id DESC'+('' if detailed else ' LIMIT 200'),args)]
     def do_GET(self):
-        path=self.path.split('?')[0]
-        pages={'/':'index.html','/index.html':'index.html','/avaliacoes':'reviews.html','/admin':'admin.html'}
+        parsed=urlparse(self.path)
+        path=parsed.path
+        selected_hotel=parse_qs(parsed.query).get('hotel',['all'])[0]
+        pages={'/':'index.html','/index.html':'index.html','/avaliacoes':'reviews.html','/admin':'admin.html','/beach-hills':'index.html','/hotel-fenix':'index.html','/avaliacoes/beach-hills':'reviews.html','/avaliacoes/hotel-fenix':'reviews.html'}
         if path in pages: return self.respond(200,(ROOT/pages[path]).read_bytes(),'text/html; charset=utf-8')
-        if path=='/api/reviews': return self.respond(200,self.rows("status='approved' AND publication_consent=1"))
+        if path=='/api/reviews':
+            hotel=selected_hotel if selected_hotel in ('beach_hills','hotel_fenix') else 'beach_hills'
+            return self.respond(200,self.rows("status='approved' AND publication_consent=1 AND hotel=?",(hotel,)))
         if path=='/api/admin/session':
             session=self.session_info()
             return self.respond(200,{'authenticated':session is not None,'configured':bool(load_users()),'username':session['display_name'] if session else None})
@@ -75,8 +80,10 @@ class Handler(BaseHTTPRequestHandler):
             if not self.admin(): return self.respond(401,{'error':'Entre no painel.'})
             with sqlite3.connect(DB) as db:
                 stats={}
+                where=' WHERE hotel=?' if selected_hotel in ('beach_hills','hotel_fenix') else ''
+                args=(selected_hotel,) if where else ()
                 for field in ('rating','food_rating','service_rating','wait_rating','ambience_rating'):
-                    avg,count=db.execute('SELECT AVG('+field+'),COUNT('+field+') FROM reviews').fetchone()
+                    avg,count=db.execute('SELECT AVG('+field+'),COUNT('+field+') FROM reviews'+where,args).fetchone()
                     stats[field]={'average':round(avg,2) if avg is not None else None,'count':count}
             return self.respond(200,stats)
         if path=='/api/admin/reviews':
@@ -101,8 +108,9 @@ class Handler(BaseHTTPRequestHandler):
                     if not isinstance(item,dict): return self.respond(400,{})
                     rating,meal=item.get('rating'),item.get('meal')
                     name=data.get('name','') if batch else item.get('name','')
+                    hotel=data.get('hotel','beach_hills') if batch else item.get('hotel','beach_hills')
                     comment=item.get('comment','')
-                    if type(rating) is not int or rating not in range(1,6) or meal not in ('Almoço','Jantar') or meal in seen or not isinstance(name,str) or not isinstance(comment,str) or len(name)>80 or len(comment)>1500: return self.respond(400,{'error':'Confira a nota geral e os campos de cada refeição.'})
+                    if type(rating) is not int or rating not in range(1,6) or meal not in ('Almoço','Jantar') or hotel not in ('beach_hills','hotel_fenix') or meal in seen or not isinstance(name,str) or not isinstance(comment,str) or len(name)>80 or len(comment)>1500: return self.respond(400,{'error':'Confira a nota geral e os campos de cada refeição.'})
                     seen.add(meal)
                     categories=[item.get(k) for k in ('food_rating','service_rating','wait_rating','ambience_rating')]
                     if any(v is not None and (type(v) is not int or v not in range(1,6)) for v in categories): return self.respond(400,{'error':'As notas devem estar entre 1 e 5.'})
@@ -112,12 +120,12 @@ class Handler(BaseHTTPRequestHandler):
                     if type(consent) is not bool: return self.respond(400,{})
                     token=secrets.token_urlsafe(32)
                     now=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
-                    values=(rating,meal,name.strip().split(' ')[0],comment.strip(),hashlib.sha256(token.encode()).hexdigest(),int(consent),now if consent else None,('publication-v2' if batch else 'publication-v1') if consent else None,'pending' if consent else 'private',*categories,int(wait_na),submission_id)
+                    values=(rating,meal,name.strip().split(' ')[0],comment.strip(),hotel,hashlib.sha256(token.encode()).hexdigest(),int(consent),now if consent else None,('publication-v2' if batch else 'publication-v1') if consent else None,'pending' if consent else 'private',*categories,int(wait_na),submission_id)
                     prepared.append((values,token,meal))
                 receipts=[]
                 with sqlite3.connect(DB) as db:
                     for values,token,meal in prepared:
-                        columns='rating,meal,name,comment,receipt,publication_consent,consent_at,consent_version,status,food_rating,service_rating,wait_rating,ambience_rating,wait_not_applicable,submission_id'
+                        columns='rating,meal,name,comment,hotel,receipt,publication_consent,consent_at,consent_version,status,food_rating,service_rating,wait_rating,ambience_rating,wait_not_applicable,submission_id'
                         cursor=db.execute('INSERT INTO reviews ('+columns+') VALUES ('+','.join('?' for _ in values)+')',values)
                         receipts.append({'id':cursor.lastrowid,'receipt':token,'meal':meal})
                 result={'ok':True,'receipts':receipts,'submission_id':submission_id}
