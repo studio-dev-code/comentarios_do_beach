@@ -46,6 +46,7 @@ class ModerationTest(unittest.TestCase):
                 self.assertEqual(call(guest,'/api/reviews'),[])
                 private=call(guest,'/api/reviews',dict(rating=5,meal='Almoço',comment='Privada'))
                 self.assertEqual(call(guest,'/api/reviews/own',{'receipt':private['receipt']})[0]['status'],'private')
+                self.assertTrue(any(r['id']==private['id'] and r['status']=='private' for r in call(admin,'/api/admin/reviews')))
                 with self.assertRaises(urllib.error.HTTPError) as error: call(admin,'/api/admin/moderate',dict(id=private['id'],status='approved'))
                 self.assertEqual(error.exception.code,409);error.exception.close()
                 stats=call(admin,'/api/admin/stats')

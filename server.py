@@ -62,7 +62,7 @@ class Handler(BaseHTTPRequestHandler):
             db.row_factory=sqlite3.Row
             fields='id,created_at,rating,meal,name,comment,status,publication_consent,consent_at,consent_version'
             if detailed: fields+=',food_rating,service_rating,wait_rating,ambience_rating,wait_not_applicable,submission_id'
-            return [dict(r) for r in db.execute('SELECT '+fields+' FROM reviews WHERE '+where+' ORDER BY id DESC LIMIT 200',args)]
+            return [dict(r) for r in db.execute('SELECT '+fields+' FROM reviews WHERE '+where+' ORDER BY id DESC'+('' if detailed else ' LIMIT 200'),args)]
     def do_GET(self):
         path=self.path.split('?')[0]
         pages={'/':'index.html','/index.html':'index.html','/avaliacoes':'reviews.html','/admin':'admin.html'}

@@ -32,3 +32,11 @@ As contas Hotel e Devy ainda NÃO foram ativadas. A confirmação foi feita sem 
 - Exportação: python3 export_reviews.py > avaliacoes.csv
 - Testes isolados aprovados: python3 -m unittest test_moderation test_users. Cobrem moderação, autorização, médias, envio conjunto sem gravação parcial e independência das contas/senhas.
 - Visual e interações conferidos no navegador; prévias administrativas usaram dados fictícios em servidor temporário separado, já encerrado.
+
+## Correção em 20/10/2026
+- Duas avaliações reais encontradas no banco, ambas privadas; backup SQLite realizado em data/backups antes das alterações.
+- Painel agora inicia em Todas e atualiza automaticamente a cada 15 segundos e ao voltar à aba.
+- Consulta administrativa sem limite de 200; mural público mantém limite.
+- Testes test_moderation e test_users aprovados, incluindo avaliação privada no painel. Teste isolado com 205 registros e sintaxe JavaScript aprovados.
+- Contas ainda ausentes: responsável precisa executar setup_users.py e digitar a senha. Não afirmar que ativação terminou.
+- Hospedagem permanente e backup externo continuam pendentes; Codespaces precisa permanecer ligado.
